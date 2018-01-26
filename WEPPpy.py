@@ -1,4 +1,5 @@
-import os, shlex, csv, sys, datetime, subprocess
+import os, shlex, csv, sys, datetime, subprocess, re, operator
+from functools import reduce
 
 '''
 WEPPpy v0.1 - Initial
@@ -24,11 +25,11 @@ Functions include:
     readOFEs
     makeHillRunFile
     makeWSRunFile
+    readPRW
     runWEPP
     
 Author: Dylan S. Quinn - quinnd@uidaho.edu - dylansquinn@gmail.com
 '''
-
 
 
 '''Custom classes for WEPP input file management'''
@@ -45,10 +46,26 @@ class Hill:
 
 
 class Channel:
-    def __init__(self):
-        pass
+    def __init__(self, head, tail, direction, length, width, definition, soil, profile):
+        self.head = head
+        self.tail = tail
+        self.direction = direction
+        self.length = length
+        self.width = width
+        self.definition = definition
+        self.soil = soil
+        self.profile = profile #Slope object
 
-
+'''     
+head = (5610,1510)
+Tail = (5690,1690)
+Direction = 113.928993
+Length = 213.137085
+Width = 1.000000
+Definition = "OnRock"
+Soil = "willow\willow.sol"
+Profile
+'''
 class Watershed:
     '''
     hills - a list of Hill objects
@@ -56,6 +73,14 @@ class Watershed:
     def __init__(self,hills,channels):
         pass
        
+       
+class Slope:
+    
+    def __init__(self, length, width, aspect):
+        self.length = length
+        self.width = width
+        self.aspect = aspect
+
 
 class Run:
     '''
@@ -118,9 +143,9 @@ class Path:
         self.output = output
         self.input = input
         self.exe = exe_path
-        self.slope = '/input/'
-        self.cli = '/input/'
-        self.man = '/input/'
+        self.slope = './input/'
+        self.cli = './input/'
+        self.man = './input/'
         self.soil = './input/'
         self.output = './output/'
 
@@ -792,6 +817,23 @@ class Management:
         '''
     
 
+class Climate:
+    def __init__(self,fin):
+        self.file = ''
+        with open(fin,'r') as c:
+            for line in c.readlines():
+                self.file += line
+        
+        self.name = fin.split('\\')[-1]
+    
+    def duplicate(self,dir,hid):
+        '''Writes a duplicate climate file in the specified directory for 
+            each hill id in the hid list'''
+        cprint('Duplicating climate files for {} hillslope(s)'.format(len(hid)),True)
+        for h in hid:
+            with open(Path.file(dir,'{}.cli'.format(h)),'w') as o:
+                
+                o.write(self.file)
   
 '''Soil functions'''
 def readSoil(fin):
@@ -885,8 +927,62 @@ def makeSol(prefix):
         
     return  
 
-          
- 
+def readPRW(fin):
+    '''Reads in a WEPP '.prw' watershed file and returns a dictionary of described parameters
+        * no support for OFEs in prw file*
+    '''
+    def getFromDict(dataDict, mapList):
+        return reduce(operator.getitem, mapList, dataDict)
+    
+    def setInDict(dataDict, mapList, value):
+        getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
+        
+    with open(fin,'r') as f:
+        tags = {'Other':{}}
+        temp = []
+        tag_list = []
+        
+        bc = 0
+        pt = None
+        
+        for line in f.readlines():
+            #bracket counter
+            bc0 = bc #previous itter
+            if '{' in line:
+                bc += 1
+                tag = re.findall('([A-Za-z0-9.,_ ]+)',line)[0].strip()
+                print '{} {}{}'.format(bc,(bc-1)*'    ', tag)
+                tag_list.append(tag)            
+                setInDict(tags, tag_list, {})
+                continue
+                
+            if '}' in line:
+                bc -= 1
+                if len(temp)>0:
+                    print '{} {}{}'.format(bc,bc*'    ','\n    '.join(temp))
+                    setInDict(tags, tag_list, '\n'.join(temp))
+                    temp = []
+                    
+                tag_list.pop()
+                continue
+                
+            if '=' in line:
+                k,v = line.strip().split(' = ')
+                temp_tag_list = list(tag_list)
+                try:
+                    setInDict(tags, tag_list.append(k), v)
+                except:
+                    tags['Other'][k] = v
+                
+                print '{} {}{}'.format(bc,bc*'    ',[k,v])
+                continue
+            
+            if bc0 == bc:
+                temp.append(line.strip())
+                continue   
+    
+    return tags
+
 def cprint(message,log=False):
     '''Prints a message to console with optional support for writing to a log file    '''
     #os.chdir('C:\\GeoWEPP\\WEPP\\testruns\\wil\\script\\database')
@@ -912,7 +1008,7 @@ def makeHillRunFile(hid,files):
     cli = 'p{}_.cli'.format(hid)
     slp = 'p{}_.slp'.format(hid)
     sol = 'p{}_.sol'.format(hid)
-    years = 5
+    years = 6
     
     file_dic = {'water_file':'Y\n{}water_{}.txt'.format(folder,hid),'pass_file':'Y\n{}pass_{}.txt'.format(folder,hid),'init_file':'Y\n{}init_{}.txt'.format(folder,hid),'crop_file':'Y\n{}init_{}.txt'.format(folder,hid),'soil_file':'Y\n{}soil_{}.txt'.format(folder,hid),'sed_file':'Y\n{}sed_{}.txt'.format(folder,hid),'graph_file':'Y\n{}graph_{}.txt'.format(folder,hid),'event_file':'Y\n{}event_{}.txt'.format(folder,hid),'ofe_file':'Y\n{}ofe_{}.txt'.format(folder,hid),'sum_file':'Y\n{}sum_{}.txt'.format(folder,hid),'winter_file':'Y\n{}winter_{}.txt'.format(folder,hid),'plant_file':'Y\n{}plant_{}.txt'.format(folder,hid)}
     
@@ -931,11 +1027,30 @@ def runWEPP(exe_path, run_file, error_file):
             run_file - path to any wepp run file
             error_file - output error file
     '''
+    def checkError(fin):
+        #read second to last line of error file
+        l = ''
+        with open(fin,'r') as e:
+            l = e.readlines()[-1]
+        if l.find('SUCCESSFULLY'):
+            return (True,l)
+        else:
+            return (False,l)
+    
     #p18_.run
     #p18.err
     cmd = '{exe_path} < {run_file} > {error_file}'.format(exe_path=exe_path,run_file=run_file, error_file=error_file)
-    cprint('Running WEPP with run file: {}'.format(run_file))
+    cprint('Running WEPP with run file: {}'.format(run_file),True)
+    dts = datetime.datetime.now()
     subprocess.call(cmd,shell=True)
+    dte = datetime.datetime.now()
+    dt = dte - dts
+    e = checkError(error_file)
+    if e[0]:
+        cprint('WEPP simulation completed Successfully in {}'.format(str(dt)),True)
+    else:
+        cprint('Error in WEPP simulation:',True)
+        cprint('    {}'.format(e[1]),True)
     return
     
     
@@ -961,7 +1076,7 @@ def mergeGraph():
             
      
 
-def makeWSRunFile(hid, years='5',units = 'M'):
+def makeWSRunFile(hid, years='6',units = 'M'):
     
     '''Creates a WEPP watershed run file
         
@@ -975,7 +1090,8 @@ def makeWSRunFile(hid, years='5',units = 'M'):
     try:
         years = str(years)
         units = str(units)
-        map(hid,str)
+        map(str,hid)
+        
     except:
         cprint('ERROR in Run File Input types',True)
     
@@ -1075,18 +1191,18 @@ def makeWSRunFile(hid, years='5',units = 'M'):
         'N',
         'N',
         'N',
-        '/{ws_folder}/pw{ws}.str',
-        '/{ws_folder}/pw{ws}.chn',
-        '/{ws_folder}/pw{ws}.imp',
-        '/{ws_folder}/pw{ws}.man',
-        '/{ws_folder}/pw{ws}.slp',
-        '/{ws_folder}/pw{ws}.cli',
-        '/{ws_folder}/pw{ws}.sol',
+        './{ws_folder}/pw{ws}.str',
+        './{ws_folder}/pw{ws}.chn',
+        
+        './{ws_folder}/pw{ws}.man',
+        './{ws_folder}/pw{ws}.slp',
+        './{ws_folder}/pw{ws}.cli',
+        './{ws_folder}/pw{ws}.sol',
         '0',
         '{years}']).format(years=years,ws=0,ws_folder='ws')
         
     
-        
+    #'./{ws_folder}/pw{ws}.imp',    
     #===END WATERSHED SECTION===     
     
     
@@ -1101,26 +1217,32 @@ def makeWSRunFile(hid, years='5',units = 'M'):
 #print makeWSRunFile(['10','11'],years='5')
         
 
-
+def importDefaults(fin):
+    #find a way to import from file
+    with open(fin,'r') as d:
+        pass
 
 '''Default Variables'''
-    
+exe_path = r'C:\GeoWEPP\wepp\wepp.exe'    
 exe_path = r'C:\\GeoWEPP\\WEPP\\wepp\\wepp.exe'
 ws = r'C:\\GeoWEPP\\WEPP\\testruns\\wil\\script'
 in_path = 'database'
 out_path =  'input'
 
-exe_path = r'C:\WEPP\wepp\wepp.exe'
-ws = r'C:\Users\Dylan\OneDrive\UI\MS\Research\WEPPpy\workspace' #master workspace
+#exe_path = r'C:\GeoWEPP\wepp\wepp.exe'
+ws = r'C:\Users\quinnd\OneDrive\UI\MS\Research\WEPPpy\workspace' #master workspace
 dbf = 'database' #database folder
 inf = 'inputs' #inputs folder
 outf =  'outputs' #outputs folder
 
-
+#set working directory as specified
 os.chdir(ws)
 
+#initialize log file
 with open('log.txt','w') as o:
     o.write('WEPPpy initialized at {}\n'.format(datetime.datetime.now()))
+
+#create path instance
 Path = Path(ws,dbf,inf,outf,exe_path)
 
 
