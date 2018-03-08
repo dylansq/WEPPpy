@@ -1,4 +1,5 @@
 import os, shlex, csv, sys, datetime, subprocess, re, operator
+from distutils import dir_util
 from functools import reduce
 
 '''
@@ -30,7 +31,13 @@ Functions include:
     
 Author: Dylan S. Quinn - quinnd@uidaho.edu - dylansquinn@gmail.com
 '''
-
+'''
+read databases
+    ofe assignments h,m,l,u for all ofes
+    plant and initial db
+    soils
+    
+'''
 
 '''Custom classes for WEPP input file management'''
 
@@ -140,8 +147,8 @@ class Path:
         '''
         self.ws = workspace
         self.db = file_db
-        self.output = output
-        self.input = input
+        self.foutput = output
+        self.finput = input
         self.exe = exe_path
         self.slope = './input/'
         self.cli = './input/'
@@ -151,19 +158,22 @@ class Path:
 
     def fileo(self,file):
         '''Returns write path for a file to the WEPP output directory'''
-        return os.path.join(self.ws,self.output,file)
+        return os.path.join(self.ws,self.foutput,file)
     
     def filei(self,file):
         '''Returns write path for a file to the WEPP input directory'''
-        return os.path.join(self.ws,self.input,file)
+        return os.path.join(self.ws,self.finput,file)
     
     def filedb(self,file):
         '''Returns the read path for a file in the generic database directory'''
         return os.path.join(self.ws,self.db,file)
     
     def file(self,folder,file):
-        '''Returns the generic path for a read or write file from a specified directory'''
+        '''Returns the generipc path for a read or write file from a specified directory'''
         return os.path.join(self.ws,folder,file)
+    
+    def all(self):
+        return '\n'.join([self.ws,self.db,self.foutput,self.finput,self.exe])
     
     def __str__(self):
         return 'Path object workspace "{}"'.format(self.ws)
@@ -178,6 +188,21 @@ class Path:
 '''
 
 
+class Inp:
+    
+    def __init__(self):
+        self.baseflow = '1e-9'
+        self.timesetep = '600' #seconds
+        self.ofes = '1'
+        self.ofe = '67'
+        
+    
+    def write(self,fout):
+        fout = Path.fileo('',fout)
+        with open(fout,'w') as o:
+            o.write('2 {}\n{}\n{}\n'.format(self.timestep,self.baseflow,self.ofes,self.ofe))
+ 
+        
 class SoilHorizon:
     '''Stores attributes of a single soil horizon
             Initialize attributes based on horizon dictionary
@@ -208,6 +233,7 @@ class SoilDB:
         
         #soil parameters
         self.name = s['name']
+        self.version = s['version']
         self.texture = s['texture']
         self.horizons_count = s['horizons']
         self.albedo = s['albedo']
@@ -242,13 +268,24 @@ class SoilDB:
     
     
     def update(self):
-        str ="'{name}'    '{texture}'    {horizons_count}    {albedo}    {sat}    {kinter:.2f}    {krill:.2f}    {tauc:.2f}    {keff:.2f}\n".format(**vars(self))
-        for horizon in self.horizons:
-            str += "    {depth:.0f}    {bd}    {ksat}    {anis}    {fc}    {wp}    {sand}    {clay}    {om}    {cec}    {rocks}\n".format(**vars(horizon))                                       
+        if self.version == '7778':
+            soil_str ="'{name}'    '{texture}'    {horizons_count}    {albedo}    {sat}    {kinter:.2f}    {krill:.6f}    {tauc:.2f}    {keff:.2f}\n".format(**vars(self))
+            for horizon in self.horizons:
+                soil_str += "    {depth:.0f}    {bd}    {ksat}    {anis}    {fc}    {wp}    {sand}    {clay}    {om}    {cec}    {rocks}\n".format(**vars(horizon))                                       
+            
+            soil_str +="{bed}    {bed_id}    {bed_thickness}    {bed_ksat}\n".format(**vars(self))
+            self.soil = soil_str
+            return soil_str
         
-        str +="{bed}    {bed_id}    {bed_thickness}    {bed_ksat}\n".format(**vars(self))
-        return str
-    
+        if self.version == '2006.2':
+            soil_str ="'{name}'    '{texture}'    {horizons_count}    {albedo}    {sat}    {kinter:.2f}    {krill:.6f}    {tauc:.2f}    {keff:.2f}\n".format(**vars(self))
+            for horizon in self.horizons:
+                soil_str += "    {depth:.0f}    {sand}    {clay}    {om}    {cec}    {rocks}\n".format(**vars(horizon))                                       
+            
+            soil_str +="{bed}    {bed_id}    {bed_thickness}    {bed_ksat}\n".format(**vars(self))
+            self.soil = soil_str
+            return soil_str
+        
     def __str__(self):
         return self.update()
 
@@ -312,8 +349,6 @@ class Management:
     def __init__(self):
         
         pass
-
-    
     
     def populate(self,r):
         ()
@@ -321,500 +356,6 @@ class Management:
 
 
 
-        s =     ("#######################\n"
-                "# {: <20}#\n"
-                "#######################\n").format('Plant Section')
-        
-        test = {
-            'v':'98.4',
-            'ofes':9,
-            'years':6,
-            
-            }
-        
-        
-        
-        
-        
-        
-        
-        
-        sections = ["Header Section","Plant Section","Operation Section","Initial Conditions Section","Surface Effects Section","Contouring Section","Drainage Section","Yearly Section","Management Section"]
-        
-        
-        
-        
-        intro_str = ("{v}\n#\n#\n#\n#\n\n"
-                     "{} #number of OFEs\n"
-                     "{years} #(total) years in simulation\n").format(**test)
-        '''
-        
-        98.4
-        #
-        #
-        #
-        #
-        
-        9 # number of OFE's
-        6 # (total) years in simulation
-        '''
-        '''
-        #######################
-        # Plant Section       #
-        #######################
-        
-        1  # Number of plant scenarios
-        
-        
-        For_1375 
-        Growth, Decomp
-        (null)
-        D. Quinn 11/17
-        1  #landuse
-        WeppWillSet
-        8.00000 3.00000 1.80000 2.00000 5.00000 90.00000 0.00000 0.30000 0.50000 0.00500
-        0.20000 0.60000 0.60000 0.99000 17.00000 150.00000 0.42000 0.20000
-        2  # mfo - <non fragile>
-        0.00700 0.00400 20.00000 0.10000 0.50000 0.30000 0.33000 0.20000 91 40.00000
-        -40.00000 2.00000 0.00000
-        
-        
-        '''
-        
-        
-        
-        
-        plant_str = ("test_{id:0>3}\n" #internal ID
-                    "{desc}\n" #description
-                    "(null)\n"
-                    "{comment}\n"
-                    "{lu:.0f}    #landuse\n{h_units}\n"
-                    "{canopy_cover} {canopy_param} {e_ratio} {temp} {resid_par} {gdd_em} {grazing_bio} {p_cut} {pct_canopy_sen} {p_diameter}\n"
-                    "{pct_to_max_lai} {pct_biomass_sen} {rad_coeff} {resid_adj} {dw_frict_fact} {gdd_season} {harvest} {canopy_max}\n"
-                    "{mfo_value:.0f}\n"
-                    "{decomp_above} {decomp_below} {temp_opt} {drought_tol} {p_space} {root_depth_max} {root_shoot} {root_mass_max} {sen_length} {temp_max_crit}\n"
-                    "{temp_min_crit} {lai_max} {yield_opt}").format(**r)
-        
-        '''
-        #######################
-        # Operation Section   #
-        #######################
-        
-        0  # Number of operation scenarios
-        
-        
-        
-        
-        ###############################
-        # Initial Conditions Section  #
-        ###############################
-        
-        1  # Number of initial scenarios
-        
-        
-        For_3256
-        Growth, Decomp,
-        (null)
-        D. Quinn 11/17
-        1  #landuse
-        1.10000 0.00000 330 1000 0.00000 0.00000
-        1 # iresd  <For_1375>
-        2 # mang perennial
-        400.04999 0.06000 0.00000 0.06000 0.00000
-        1  # rtyp - temporary
-        0.00000 0.00000 0.00000 0.00000 0.00000
-        0.19997 0.19997
-        '''
-        initial_str = ("test_{id:0>3}\n" #internal ID
-                    "{desc}\n" #description
-                    "(null)\n"
-                    "{comment}\n"
-                    "{lu:.0f}\n"
-                    "{bd} {cc_init} {days_harv} {days_till} {frost_init} {ir_cover_init}\n"
-                    ""#referenced plant - internal plant
-                    "{mgmt:.0f}\n"
-                    "{rain_till} {ridge_init} {r_cover_init} {rough_init} {rill_space}\n"
-                    "{r_type:.0f}  # rtyp - temporary\n"
-                    "{snow_d} {thaw_d} {sec_till_d} {pri_till_d} {ir_width}\n"
-                    "{root_init} {res_sub}").format(**r)
-        '''
-        
-        
-        ############################
-        # Surface Effects Section  #
-        ############################
-        
-        0  # Number of Surface Effects Scenarios
-        
-        
-        
-        #######################
-        # Contouring Section  #
-        #######################
-        
-        0  # Number of contour scenarios
-        
-        
-        #######################
-        # Drainage Section    #
-        #######################
-        
-        0  # Number of drainage scenarios
-        
-        
-        #######################
-        # Yearly Section      #
-        #######################
-        
-        1  # looper; number of Yearly Scenarios
-        #
-        # Yearly scenario 1 of 1
-        #
-        Year 1 
-        
-        
-        
-        1  # landuse <cropland>
-        1  # plant growth scenario
-        0  # surface effect scenario
-        0  # contour scenario
-        0  # drainage scenario
-        2 # management <perennial>
-           275 # senescence date 
-           0 # perennial plant date --- 0 /0
-           0 # perennial stop growth date --- 0/0
-           0.0000  # row width
-           3  # neither cut or grazed
-        
-        
-        #######################
-        # Management Section  #
-        #######################
-        
-        Manage
-        description 1
-        description 2
-        description 3
-        9   # number of OFE's
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-        6  # rotation repeats
-        1  # years in rotation
-        
-        #
-        # Rotation 1: year 1 to 1
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-        
-        
-        
-        
-        #######################
-        # Plant Section       #
-        #######################
-        
-        1  # Number of plant scenarios
-        
-        #######################
-        # Operation Section   #
-        #######################
-        
-        0  # Number of operation scenarios
-        
-        
-        ###############################
-        # Initial Conditions Section  #
-        ###############################
-        
-        1  # Number of initial scenarios
-        
-        
-        ############################
-        # Surface Effects Section  #
-        ############################
-        
-        0  # Number of Surface Effects Scenarios
-        
-        
-        
-        #######################
-        # Contouring Section  #
-        #######################
-        
-        0  # Number of contour scenarios
-        
-        
-        #######################
-        # Drainage Section    #
-        #######################
-        
-        0  # Number of drainage scenarios
-        
-        
-        #######################
-        # Yearly Section      #
-        #######################
-        
-        1  # looper; number of Yearly Scenarios
-        #
-        # Yearly scenario 1 of 1
-        #
-        Year 1 
-        
-        yearly = {"landuse":1,"plant_scenario":1,"surface_scenario":0,"contour_scenario":0,"drainage_scenario":0,"management":2,"scenesence_date":275,"plant_date":0,"stop_growth_date":0,"row_width":0,"cut":3}
-        
-        1  # landuse <cropland>
-        1  # plant growth scenario
-        0  # surface effect scenario
-        0  # contour scenario
-        0  # drainage scenario
-        2 # management <perennial>
-           275 # senescence date 
-           0 # perennial plant date --- 0 /0
-           0 # perennial stop growth date --- 0/0
-           0.0000  # row width
-           3  # neither cut or grazed
-        
-        
-        #######################
-        # Management Section  #
-        #######################
-        
-        Manage
-        description 1
-        description 2
-        description 3
-        9   # number of OFE's
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-            1   # initial condition index
-        6  # rotation repeats
-        1  # years in rotation
-        
-        #
-        # Rotation 1: year 1 to 1
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        
-        #
-        # Rotation 2: year 2 to 2
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        
-        #
-        # Rotation 3: year 3 to 3
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        
-        #
-        # Rotation 4: year 4 to 4
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        
-        #
-        # Rotation 5: year 5 to 5
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        
-        #
-        # Rotation 6: year 6 to 6
-        #
-        
-           1    #  <plants/yr 1> - OFE: 1>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 2>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 3>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 4>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 5>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 6>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 7>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 8>
-              1    # year index
-        
-           1    #  <plants/yr 1> - OFE: 9>
-              1    # year index
-        '''
     
 
 class Climate:
@@ -826,25 +367,24 @@ class Climate:
         
         self.name = fin.split('\\')[-1]
     
-    def duplicate(self,dir,hid):
+    def duplicate(self,dir,hid,pref_out='p'):
         '''Writes a duplicate climate file in the specified directory for 
             each hill id in the hid list'''
         cprint('Duplicating climate files for {} hillslope(s)'.format(len(hid)),True)
         for h in hid:
-            with open(Path.file(dir,'{}.cli'.format(h)),'w') as o:
+            with open(Path.file(dir,'{}{}.cli'.format(pref_out,h)),'w') as o:
                 
                 o.write(self.file)
   
 '''Soil functions'''
 def readSoil(fin):
-    '''Reads in a 7778 version WEPP soil file and returns a Soil object
+    '''Reads in a 7778 or 2006.2 version WEPP soil file and returns a Soil object
+        Support for other files can be added by by adding soil, horizon, and bed key lists as noted below
     
-        Input:  A 7778 version WEPP soil file ('.sol') with one OFE
+    
+        Input:  A 7778 or 2006.2 version WEPP soil file ('.sol') with one OFE
         Return: Soil Object'''
     
-    soil_key = ['name','texture','horizons','albedo','sat','kinter','krill','tauc','keff']
-    horizon_key = ['depth','bd','ksat','anis','fc','wp','sand','clay','om','cec','rocks']
-    bed_key = ['bed','bed_id','bed_thickness','bed_ksat']
     
     def floatDict(d):
         for k in d.keys():
@@ -854,23 +394,43 @@ def readSoil(fin):
                 pass
         return d    
     
+    fin = Path.filedb(fin)
     with open(fin,'r') as f:
         i = 0
         file = [l for l in f.readlines() if not l.startswith("#")] #remove comments
-        version = file[0]
+        version = file[0].strip()
+        
+        #default format
+        soil_key = ['name','texture','horizons','albedo','sat','kinter','krill','tauc','keff']
+        horizon_key = ['depth','bd','ksat','anis','fc','wp','sand','clay','om','cec','rocks']
+        bed_key = ['bed','bed_id','bed_thickness','bed_ksat']
+        
+        
+        if version == '7778':
+            soil_key = ['name','texture','horizons','albedo','sat','kinter','krill','tauc','keff']
+            horizon_key = ['depth','bd','ksat','anis','fc','wp','sand','clay','om','cec','rocks']
+            bed_key = ['bed','bed_id','bed_thickness','bed_ksat']
+            
+        if version == '2006.2':
+            soil_key = ['name','texture','horizons','albedo','sat','kinter','krill','tauc','keff']
+            horizon_key = ['depth','sand','clay','om','cec','rocks']
+            bed_key = ['bed','bed_id','bed_thickness','bed_ksat']   
+           
+        # add file format for other versions here   
+         
         comments = file[1]
         s = floatDict(dict(zip(soil_key, shlex.split(file[3]))))
         h = []
         for i in range(int(s['horizons'])):
             h.append(floatDict(dict(zip(horizon_key, file[4+i].split()))))
+            file[4+i].split()
         b = floatDict(dict(zip(bed_key,file[5+i].split())))
-    
+        s['version'] = version  
     desc = fin.strip('.sol').split('/')[-1]
     
     
     return SoilDB(desc,s,h,b)
-        
-           
+                
 def writeSoil(fout,ofes):
     '''Writes a soil file (.sol) for each OFE in a list of Soil Objects
         Input: 
@@ -881,7 +441,40 @@ def writeSoil(fout,ofes):
         o.write("7778\ncomments: soil file\n{} 1\n".format(len(ofes)))
         for s in ofes:
             o.write(s.soil)
+
         
+        
+def makeSol(prefix,year=None,prefix_out='p'):
+    '''Makes a '.sol' file containing referenced soil parameters for each specified OFE
+        reads in '.sol' files containing a single ofe and writes files for each specific hillslope
+        containing the correct number of OFEs'''
+    soils = []
+    for sev in ['unb','low','mod','high']:
+        #Custom loop for described file structure (eg. willow_high.sol')
+        if year:
+            file = Path.filedb(r'{}\{}_{}.sol'.format(year,prefix,sev))
+        else:
+            file = Path.filedb('{}_{}.sol'.format(prefix,sev))
+        soil = readSoil(file)
+        soils.append(soil)
+        
+    hills = readOFEs(Path.filedb('hills.csv'))
+    
+        
+    for hid in hills.keys():
+        soil_ofe = []
+        for i in hills[hid]:
+            soil_ofe.append(soils[i[1]-1])
+            
+        writeSoil(Path.filei('{}{}.sol'.format(prefix_out,hid)),soil_ofe)  
+        
+        if year:
+            cprint('Writing sol file for hill id {} with {} ofe(s) for year {}'.format(hid,len(hills[hid]),year),True)
+        else:
+            cprint('Writing sol file for hill id {} with {} ofe(s)'.format(hid,len(hills[hid])),True) 
+        
+    return  
+
 
 def readOFEs(fin):
     '''Reads a database file (.csv) with OFE breaks for each hillslope '''
@@ -902,30 +495,105 @@ def readOFEs(fin):
     return hill_dic
     #21:[(1,4),(2,3)...]
         
-def makeSol(prefix):
-    '''Makes a '.sol' file containing referenced soil parameters for each specified OFE
-        reads in '.sol' files containing a single ofe and writes files for each specific hillslope
-        containing the correct number of OFEs'''
-    soils = []
-    for sev in ['unb','low','mod','high']:
-        #Custom loop for described file structure (eg. willow_high.sol')
-        file = Path.filedb('{}_{}.sol'.format(prefix,sev))
-        soil = readSoil(file)
-        soils.append(soil)
+def makeMan(hill_ofes,years,pfin,ifin):
+     #hill_ofes = [(1,4),(2,3),(3,3),(4,1)] produced by readOFEs
+    ofes = [x[1] for x in hill_ofes]
+    years = str(years)
+    mans = []
+    plants = {}
+    initials = {}
+    id_index = {} #{'input id':'file index'} same for plant and initial
+    for r in readCSVDB(pfin):
+        plants[r['id']] = PlantDB(r)
         
-    hills = readOFEs(Path.filedb('hills.csv'))
+    for r in readCSVDB(ifin):
+        initials[r['id']] = InitialDB(r)
+        
+    def section(str):
+        return '\n\n#######################\n# {str: <20}#\n#######################\n\n'.format(str=str)        
     
-        
-    for hid in hills.keys():
-        soil_ofe = []
-        for i in hills[hid]:
-            soil_ofe.append(soils[i[1]-1])
+    '''for n in set(ofes):
+        id_index[str(n)] = index()'''
             
-        writeSoil(Path.filei('{}.sol'.format(hid)),soil_ofe)  
+    [initials[str(x)].initial for x in set(ofes)]
+            
+    id_index['3'] = 2
+            
+    version = '98.4'
+    ofesl = len(ofes)
+    
+    
+    #Prepare string inputs
+    
+    a = dict((str(y),str(x)) for x,y in hill_ofes) #{'1': '4', '3': '3', '2': '3', '4': '1'} {ofe:bs...}
+    
+    
+    #Start writing string
+    
+    ms = '' #management string
+    
+    head = ('{version}\n'
+           '#\n'
+           '#\n'
+           '#\n'
+           '#\n\n'
+           '{ofesl} # number of OFEs\n'
+           '{years} # years in simulation\n\n').format(version=version,ofesl=ofesl,years=years)
+    
+    ms += head
+    
+    ms += section('Plant Section') + '{} # Number of plant scenarios\n\n\n'.format(len(set(ofes))) + '\n\n'.join([plants[str(x)].plant for x in set(ofes)])
+    ms += section('Operation Section') + '{} # Number of operation scenarios\n'.format('0')
+    ms += section('Initial Conditions Section') + '{} # Number of initial scenarios\n\n\n'.format(len(set(ofes))) + '\n\n'.join([initials[str(x)].initial for x in set(ofes)])
+    ms += section('Surface Effects Section')+ '{} # Number of surface effect scenarios\n'.format('0')
+    ms += section('Contouring Section')+ '{} # Number of contouring scenarios\n'.format('0')
+    ms += section('Drainage Section')+ '{} # Number of drainage scenarios\n'.format('0')
+    
+    
+    
+    #plant growing scenarios
+    yr = []
+    im = 1
+    
+    for i in set(ofes):
+        yr.append((i,im))
+        im += 1
         
-        cprint('Writing sol file for hill id {} with {} ofe(s)'.format(hid,len(hills[hid])),True) 
+    yt = len(set(ofes))
+    ys = '{yt} # looper; number of Yearly Scenarios\n'.format(yt = yt)
+    for y in range(len(set(ofes))):
+        ys += ('#\n# Yearly scenario {y} of {yt}\n#\n'
+               'Year {y}\n\n\n\n'
+                '1  # landuse <cropland>\n'
+                '{y}  # plant growth scenario\n'
+                '0  # surface effect scenario\n'
+                '0  # contour scenario\n'
+                '0  # drainage scenario\n'
+                '2 # management <perennial>\n'
+                '{sene_doy} # senescence date\n'
+                '0 # perennial plant date --- 0 /0\n'
+                '0 # perennial stop growth date --- 0/0\n'
+                '0.0000  # row width\n'
+                '3  # neither cut or grazed\n').format(y = y+1,yt=yt,sene_doy = plants[str(y+1)].sene_doy)
+    
+    ms += section('Yearly Section') + ys
+    
+    ms += section('Management Section')
+    
+    mgts = 'Manage\dnescription 1\ndescription2\ndescription3\n{ofes}   # number of OFEs\n'.format(ofes = len(ofes))
+    for o in range(len(ofes)):    
+        mgts += '    {ini_index}   # initial condition index\n'.format(ini_index = zip(*yr)[0].index(ofes[o])+1)
         
-    return  
+    mgts += '{}  # rotation repeats\n1  # years in rotation\n'.format(years)  
+    
+    for y in range(int(years)):
+        mgts += '#\n# Rotation 1: year {y} to {y}\n#\n\n'.format(y=y+1)
+        for o in range(len(ofes)):
+            mgts += '   1    #  <plants/yr 1> - OFE: {ofe}>\n      {ind}    # year index\n'.format(ofe = o+1,ind = zip(*yr)[0].index(ofes[o])+1)
+    
+    ms += mgts
+    return ms 
+
 
 def readPRW(fin):
     '''Reads in a WEPP '.prw' watershed file and returns a dictionary of described parameters
@@ -951,7 +619,7 @@ def readPRW(fin):
             if '{' in line:
                 bc += 1
                 tag = re.findall('([A-Za-z0-9.,_ ]+)',line)[0].strip()
-                print '{} {}{}'.format(bc,(bc-1)*'    ', tag)
+                cprint('{} {}{}'.format(bc,(bc-1)*'    ', tag))
                 tag_list.append(tag)            
                 setInDict(tags, tag_list, {})
                 continue
@@ -959,7 +627,7 @@ def readPRW(fin):
             if '}' in line:
                 bc -= 1
                 if len(temp)>0:
-                    print '{} {}{}'.format(bc,bc*'    ','\n    '.join(temp))
+                    cprint('{} {}{}'.format(bc,bc*'    ','\n    '.join(temp)))
                     setInDict(tags, tag_list, '\n'.join(temp))
                     temp = []
                     
@@ -970,11 +638,11 @@ def readPRW(fin):
                 k,v = line.strip().split(' = ')
                 temp_tag_list = list(tag_list)
                 try:
-                    setInDict(tags, tag_list.append(k), v)
+                    setInDict(tags, temp_tag_list.append(k), v)
                 except:
                     tags['Other'][k] = v
                 
-                print '{} {}{}'.format(bc,bc*'    ',[k,v])
+                cprint('{} {}{}'.format(bc,bc*'    ',[k,v]))
                 continue
             
             if bc0 == bc:
@@ -983,6 +651,41 @@ def readPRW(fin):
     
     return tags
 
+def readDB(fin):
+    '''Reads in a plant or initial '.db' file'''
+    with open(Path.filedb(fin),'r') as o:
+        pass
+
+def readCSVDB(fin):
+    '''Reads in a '.csv' database describing plant and initial plant conditions and returns a dictionary of key-value pairs
+        * no support for OFEs in prw file*
+        '''
+    default_dic = {}
+    with open(fin) as csvfile:
+        rs = []
+        reader = csv.DictReader(csvfile)
+        for r in reader:  
+            for k in r.keys():
+                if r['id'] == '0' and k != "id":
+                    #set defaults to first row, id 0
+                    try:
+                        default_dic[k] = float(r[k])
+                    except:   
+                        default_dic = r
+                        
+                
+                elif  k != "id":
+                #try to convert all other values to float        
+                    try:
+                        r[k] = float(r[k])
+                    except:
+                        pass
+                    if r[k] == '':
+                        r[k] = default_dic[k]
+            rs.append(r)
+        return rs
+
+
 def cprint(message,log=False):
     '''Prints a message to console with optional support for writing to a log file    '''
     #os.chdir('C:\\GeoWEPP\\WEPP\\testruns\\wil\\script\\database')
@@ -990,7 +693,7 @@ def cprint(message,log=False):
     message = str(message)
     print(message)
     if log:
-        with open('log.txt','a') as log_file:
+        with open(Path.file('','log.txt'),'a') as log_file:
             log_file.write(message)
             log_file.write('\n')
     return
@@ -1020,12 +723,16 @@ def makeHillRunFile(hid,files):
     return '{units}\n{overwrite}\n{cli_type}\n{version}\n{pass_file}\n{loss_type}\n{init_file}\n{soil_loss_file}\n{water_file}\n{crop_file}\n{soil_file}\n{sed_file}\n{graph_file}\n{event_file}\n{ofe_file}\n{sum_file}\n{winter_file}\n{plant_file}\n{man}\n{slp}\n{cli}\n{sol}\n{ir}\n{years}\n{bypass}'.format(**default_dic)
 
 
-def runWEPP(exe_path, run_file, error_file):
+def runWEPP(exe_path , run_file, error_file):
     '''Runs WEPP using a given run file
         Inputs:
             exe_path - path to wepp executable file
             run_file - path to any wepp run file
             error_file - output error file
+            
+        Example: 
+            Path.exe = 'C:\GeoWEPP\WEPP\testruns\wil\thomas\WEPP2014_ph.exe'
+            runWEPP(Path.exe,Path.file('','pw0.run'),Path.file('','pw0err.txt'))
     '''
     def checkError(fin):
         #read second to last line of error file
@@ -1033,6 +740,7 @@ def runWEPP(exe_path, run_file, error_file):
         with open(fin,'r') as e:
             l = e.readlines()[-1]
         if l.find('SUCCESSFULLY'):
+            cprint('foundsuccess',True)
             return (True,l)
         else:
             return (False,l)
@@ -1053,30 +761,8 @@ def runWEPP(exe_path, run_file, error_file):
         cprint('    {}'.format(e[1]),True)
     return
     
-    
-def mergeGraph():
-    
-    dir = 'C:\GeoWEPP\WEPP\output\grph\grph'
-    idir = 'C:\GeoWEPP\WEPP\output\grph'
-    files = os.listdir(dir)
-    w = open(os.path.join(idir,'all.csv'),'w')
-    
-    head = ['id','Days In Simulation', 'Hillslope: Precipitation (mm)', 'Hillslope: Average detachment (kg/m**2)', 'Hillslope: Maximum detachment (kg/m**2)', 'Hillslope: Point of maximum detachment (m)', 'Hillslope: Average deposition (kg/m**2)', 'Hillslope: Maximum deposition (kg/m**2)', 'Hillslope: Point of maximum deposition (m)', 'Hillslope: Sediment Leaving Profile (kg/m)', 'Hillslope: 5 day average mimimum temp. (C)', 'Hillslope: 5 day average maximum temp. (C)', 'Hillslope: daily minimum temp. (C)', 'Hillslope: daily maximum temp. (C)', 'Irrigation depth (mm)', 'Irrigation_volume_supplied/unit_area (mm)', 'Runoff (mm)', 'Interrill net soil loss (kg/m**2)', 'Canopy height (m)', 'Canopy cover (0-1)', 'Leaf area index', 'Interrill cover (0-1)', 'Rill cover (0-1)', 'Above ground live biomass (kg/m**2)', 'Live root mass for OFE (kg/m**2)', 'Live root mass 0-15 cm depth (kg/m**2)', 'Live root mass 15-30 cm depth (kg/m**2)', 'Live root mass 30-60 cm depth (kg/m**2)', 'Root depth (m)', 'Standing dead biomass (kg/m**2)', 'Current residue mass on ground (kg/m**2)', 'Previous residue mass on ground (kg/m**2)', 'Old residue mass on the ground (kg/m**2)', 'Current submerged residue mass (kg/m**2)', 'Previous submerged residue mass (kg/m**2)', 'Old submerged residue mass (kg/m**2)', 'Current dead root mass (kg/m**2)', 'Previous dead root mass (kg/m**2)', 'Old dead root mass (kg/m**2)', 'Porosity (%)', 'Bulk density (g/cc)', 'Effective hydraulic conductivity (mm/hr)', 'Suction across wetting front (mm)', 'Evapotranspiration (mm)', 'Drainage flux (m/day)', 'Depth to drainable zone (m)', 'Effective intensity (mm/h)', 'Peak runoff (mm/h)', 'Effective runoff duration (h)', 'Enrichment ratio', 'Adjusted Ki (millions kg-s/m**4)', 'Adjusted Kr (x 1000 s/m)', 'Adjusted Tauc (Pascals)', 'Rill width (m)', 'Plant Transpiration (mm)', 'Soil Evaporation (mm)', 'Seepage (mm)', 'Water stress', 'Temperature stress', 'Total soil water (mm)', 'Soil water in layer 1 (mm)', 'Soil water in layer 2 (mm)', 'Soil water in layer 3 (mm)', 'Soil water in layer 4 (mm)', 'Soil water in layer 5 (mm)', 'Soil water in layer 6 (mm)', 'Soil water in layer 7 (mm)', 'Soil water in layer 8 (mm)', 'Soil water in layer 9 (mm)', 'Soil water in layer 10 (mm)', 'Random roughness (mm)', 'Ridge height (mm)', 'Frost depth (mm)', 'Thaw depth (mm)', 'Snow depth (mm)', 'Water from snow melt (mm)', 'Snow density (kg/m**3)', 'Rill cover fric fac (crop)', 'Fric. fac. due to live plant', 'Rill total fric fac (crop)', 'Composite area total friction factor', 'Rill cov fric fac (range)', 'Live basal area fric fac (range)', 'Live plant canopy fric fac (range)', 'Days since last disturbance', 'Current crop type', 'Current residue on ground type', 'Previous residue on ground type', 'Old residue on ground type', 'Current dead root type', 'Previous dead root type', 'Old dead root type', 'Sediment leaving OFE (kg/m)', 'Evaporation from residue (mm)', 'Total frozen soil water (mm)', 'Frozen soil water in layer 1 (mm)', 'Frozen soil water in layer 2 (mm)', 'Frozen soil water in layer 3 (mm)', 'Frozen soil water in layer 4 (mm)', 'Frozen soil water in layer 5 (mm)', 'Frozen soil water in layer 6 (mm)', 'Frozen soil water in layer 7 (mm)', 'Frozen soil water in layer 8 (mm)', 'Frozen soil water in layer 9 (mm)', 'Frozen soil water in layer 10 (mm)']
-    w.write(','.join(head))
-    w.write('\n')
-    
-    for f in files:
-        o = open(os.path.join(dir,f),'r')
-        lines = o.readlines()
-        for l in lines[121:]:
-            ln = l.split()
-            if '#' in ln[0]:
-                break
-            w.write('{},{}\n'.format(f.split('_')[-1],','.join(ln)))
-            
-     
 
-def makeWSRunFile(hid, years='6',units = 'M'):
+def makeWSRunFile(hid, years='6',units = 'M',prf = 'p'):
     
     '''Creates a WEPP watershed run file
         
@@ -1095,15 +781,17 @@ def makeWSRunFile(hid, years='6',units = 'M'):
     except:
         cprint('ERROR in Run File Input types',True)
     
+    
+    
     output_dic = {
         'water':True,
-        'crop':False,
-        'soil':False,
+        'crop':True,
+        'soil':True,
         'sed_loss':True,
         'graph':False,
         'event':True,
         'ofe':True,
-        'summary':False,
+        'summary':True,
         'winter':False,
         'plant':True}
             
@@ -1163,13 +851,13 @@ def makeWSRunFile(hid, years='6',units = 'M'):
             'No',
             './output/{h}_loss.txt',
             hill_output_string,
-            '{man_path}{h}.man',
-            '{slope_path}{h}.slp',
-            '{cli_path}{h}.cli',
-            '{soil_path}{h}.sol',
+            '{man_path}{prf}{h}.man',
+            '{slope_path}{prf}{h}.slp',
+            '{cli_path}{prf}{h}.cli',
+            '{soil_path}{prf}{h}.sol',
             '0',
             '{years}'
-            ]).format(h=h,years=years,**hill_path)
+            ]).format(h=h,prf = prf,years=years,**hill_path)
         ws_hill += hill_str + '\n'
     
     #===END HILLSLOPE SECTION===  
@@ -1178,28 +866,33 @@ def makeWSRunFile(hid, years='6',units = 'M'):
     ws_end = '\n'.join([
         'N',
         'N',
-        '0',
-        'loss_pw0.txt',
-        'Y',
-        'chnwb.txt',
-        'N',
-        'N',
-        'N',
-        'N',
-        'Y',
-        'ebe_pw0.txt',
-        'N',
-        'N',
-        'N',
+        '5',
+        '.\{output}\loss_pw{ws}.txt',
+        'Yes',
+        '.\{output}\wat_pw{ws}.txt',
+        'Yes',
+        '.\{output}\plant_pw{ws}.txt',
+        'Yes',
+        '.\{output}\soil_pw{ws}.txt',
+        'Yes',
+        '.\{output}\plot_pw{ws}.txt',
+        'Yes',
+        '.\{output}\grph_pw{ws}.txt',
+        'Yes',
+        '.\{output}\ebe_pw{ws}.txt',
+        'Yes',
+        '.\{output}\summary_pw{ws}.txt',
+        'No',
+        'Yes',
+        '.\{output}\yeild_pw{ws}.txt',
         './{ws_folder}/pw{ws}.str',
         './{ws_folder}/pw{ws}.chn',
-        
         './{ws_folder}/pw{ws}.man',
         './{ws_folder}/pw{ws}.slp',
         './{ws_folder}/pw{ws}.cli',
         './{ws_folder}/pw{ws}.sol',
         '0',
-        '{years}']).format(years=years,ws=0,ws_folder='ws')
+        '{years}']).format(output='results',years=years,ws=0,ws_folder='ws')
         
     
     #'./{ws_folder}/pw{ws}.imp',    
@@ -1215,14 +908,63 @@ def makeWSRunFile(hid, years='6',units = 'M'):
 
 
 #print makeWSRunFile(['10','11'],years='5')
-        
+      
+def initDB():
+    '''Read in all relevant database (soil, plant, initial) databases and create object instances'''
+    
+    return
+
+'''Unused Functions'''
+    
+def mergeGraph():
+    
+    dir = 'C:\GeoWEPP\WEPP\output\grph\grph'
+    idir = 'C:\GeoWEPP\WEPP\output\grph'
+    files = os.listdir(dir)
+    w = open(os.path.join(idir,'all.csv'),'w')
+    
+    head = ['id','Days In Simulation', 'Hillslope: Precipitation (mm)', 'Hillslope: Average detachment (kg/m**2)', 'Hillslope: Maximum detachment (kg/m**2)', 'Hillslope: Point of maximum detachment (m)', 'Hillslope: Average deposition (kg/m**2)', 'Hillslope: Maximum deposition (kg/m**2)', 'Hillslope: Point of maximum deposition (m)', 'Hillslope: Sediment Leaving Profile (kg/m)', 'Hillslope: 5 day average mimimum temp. (C)', 'Hillslope: 5 day average maximum temp. (C)', 'Hillslope: daily minimum temp. (C)', 'Hillslope: daily maximum temp. (C)', 'Irrigation depth (mm)', 'Irrigation_volume_supplied/unit_area (mm)', 'Runoff (mm)', 'Interrill net soil loss (kg/m**2)', 'Canopy height (m)', 'Canopy cover (0-1)', 'Leaf area index', 'Interrill cover (0-1)', 'Rill cover (0-1)', 'Above ground live biomass (kg/m**2)', 'Live root mass for OFE (kg/m**2)', 'Live root mass 0-15 cm depth (kg/m**2)', 'Live root mass 15-30 cm depth (kg/m**2)', 'Live root mass 30-60 cm depth (kg/m**2)', 'Root depth (m)', 'Standing dead biomass (kg/m**2)', 'Current residue mass on ground (kg/m**2)', 'Previous residue mass on ground (kg/m**2)', 'Old residue mass on the ground (kg/m**2)', 'Current submerged residue mass (kg/m**2)', 'Previous submerged residue mass (kg/m**2)', 'Old submerged residue mass (kg/m**2)', 'Current dead root mass (kg/m**2)', 'Previous dead root mass (kg/m**2)', 'Old dead root mass (kg/m**2)', 'Porosity (%)', 'Bulk density (g/cc)', 'Effective hydraulic conductivity (mm/hr)', 'Suction across wetting front (mm)', 'Evapotranspiration (mm)', 'Drainage flux (m/day)', 'Depth to drainable zone (m)', 'Effective intensity (mm/h)', 'Peak runoff (mm/h)', 'Effective runoff duration (h)', 'Enrichment ratio', 'Adjusted Ki (millions kg-s/m**4)', 'Adjusted Kr (x 1000 s/m)', 'Adjusted Tauc (Pascals)', 'Rill width (m)', 'Plant Transpiration (mm)', 'Soil Evaporation (mm)', 'Seepage (mm)', 'Water stress', 'Temperature stress', 'Total soil water (mm)', 'Soil water in layer 1 (mm)', 'Soil water in layer 2 (mm)', 'Soil water in layer 3 (mm)', 'Soil water in layer 4 (mm)', 'Soil water in layer 5 (mm)', 'Soil water in layer 6 (mm)', 'Soil water in layer 7 (mm)', 'Soil water in layer 8 (mm)', 'Soil water in layer 9 (mm)', 'Soil water in layer 10 (mm)', 'Random roughness (mm)', 'Ridge height (mm)', 'Frost depth (mm)', 'Thaw depth (mm)', 'Snow depth (mm)', 'Water from snow melt (mm)', 'Snow density (kg/m**3)', 'Rill cover fric fac (crop)', 'Fric. fac. due to live plant', 'Rill total fric fac (crop)', 'Composite area total friction factor', 'Rill cov fric fac (range)', 'Live basal area fric fac (range)', 'Live plant canopy fric fac (range)', 'Days since last disturbance', 'Current crop type', 'Current residue on ground type', 'Previous residue on ground type', 'Old residue on ground type', 'Current dead root type', 'Previous dead root type', 'Old dead root type', 'Sediment leaving OFE (kg/m)', 'Evaporation from residue (mm)', 'Total frozen soil water (mm)', 'Frozen soil water in layer 1 (mm)', 'Frozen soil water in layer 2 (mm)', 'Frozen soil water in layer 3 (mm)', 'Frozen soil water in layer 4 (mm)', 'Frozen soil water in layer 5 (mm)', 'Frozen soil water in layer 6 (mm)', 'Frozen soil water in layer 7 (mm)', 'Frozen soil water in layer 8 (mm)', 'Frozen soil water in layer 9 (mm)', 'Frozen soil water in layer 10 (mm)']
+    w.write(','.join(head))
+    w.write('\n')
+    
+    for f in files:
+        o = open(os.path.join(dir,f),'r')
+        lines = o.readlines()
+        for l in lines[121:]:
+            ln = l.split()
+            if '#' in ln[0]:
+                break
+            w.write('{},{}\n'.format(f.split('_')[-1],','.join(ln)))
+
 
 def importDefaults(fin):
     #find a way to import from file
     with open(fin,'r') as d:
         pass
 
+
+def runYears():
+    years = ['2011','2012','2013','2014','2015','2016']
+    dest = 'all'
+    for y in years:
+        makeSol('willow',y)
+        runWEPP(Path.exe,Path.file('','pw0.run'),Path.file('','pw0err.txt'))
+        #copy output
+        dir_util.copy_tree(Path.file('output',''), Path.file(dest,y))
+        dir_util.copy_tree(Path.file('results',''), Path.file(dest,y))
+
 '''Default Variables'''
+   
+  #thomas 
+#exe_path = r'C:\GeoWEPP\wepp\wepp.exe'    
+exe_path = r'C:\GeoWEPP\WEPP\testruns\wil\script\WEPP2014_ph.exe'
+ws = r'C:\GeoWEPP\WEPP\testruns\wil\script'
+dbf = 'database'
+inf = 'input' #inputs folder
+outf =  'output' #outputs folder
+'''
+   
+
 exe_path = r'C:\GeoWEPP\wepp\wepp.exe'    
 exe_path = r'C:\\GeoWEPP\\WEPP\\wepp\\wepp.exe'
 ws = r'C:\\GeoWEPP\\WEPP\\testruns\\wil\\script'
@@ -1234,7 +976,7 @@ ws = r'C:\Users\quinnd\OneDrive\UI\MS\Research\WEPPpy\workspace' #master workspa
 dbf = 'database' #database folder
 inf = 'inputs' #inputs folder
 outf =  'outputs' #outputs folder
-
+'''
 #set working directory as specified
 os.chdir(ws)
 
@@ -1248,19 +990,17 @@ Path = Path(ws,dbf,inf,outf,exe_path)
 
 
 if __name__ == '__main__':
-    
-    
-    
+        
          
     soils = []
     for sev in ['unb','low','mod','high']:
         soils.append(readSoil(Path.filedb('willow_{}.sol'.format(sev))))
-
     
-    hills = readOFEs('hills.csv')
+    
+    hills = readOFEs(Path.filedb('hills.csv'))
     
     for hid in hills.keys():
         soil_ofe = []
         for i in hills[hid]:
             soil_ofe.append(soils[i[1]-1])
-        writeSoil(Path.file(in_path,'','hill_{}'.format(hid)),soil_ofe)
+        writeSoil(Path.file(inf,'','hill_{}'.format(hid)),soil_ofe)
